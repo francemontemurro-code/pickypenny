@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Picky Penny">
+<meta name="theme-color" content="#2a1a6e">
+<meta name="description" content="Picky Penny: muoviti davanti al telefono e acchiappa al volo oggetti e lettere. Un gioco per i più piccoli.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<title>Picky Penny</title>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<video id="cam" playsinline muted autoplay></video>
+
+<!-- HUD di gioco -->
+<div id="hud" class="hidden">
+  <div class="hud-left">
+    <div class="pill score" id="hudScore">⭐ 0</div>
+    <div class="pill" id="hudLevel">Livello 1</div>
+    <div id="levelBar" class="levelbar"><i></i></div>
+  </div>
+  <div class="hud-right">
+    <div class="pill" id="hudRound">Round 1/3</div>
+    <div class="pill time" id="hudTime">2:00</div>
+    <button id="btnPause" class="pill btn-icon" aria-label="Pausa">⏸</button>
+  </div>
+</div>
+
+<div id="wordBar" class="hidden">
+  <span id="wordEmoji"></span>
+  <div id="wordTiles"></div>
+</div>
+
+<div id="banner" class="hidden"></div>
+
+<!-- Menu iniziale -->
+<section id="setup" class="screen scroll">
+  <div class="setup-inner">
+    <div class="logo-wrap">
+      <div class="logo-fly">🍓</div><div class="logo-fly f2">⭐</div><div class="logo-fly f3">🎈</div>
+      <h1 class="logo">Picky<br>Penny</h1>
+      <p class="tag">Muoviti davanti al telefono e acchiappa tutto al volo!</p>
+    </div>
+
+    <h2>Come giochiamo?</h2>
+    <div class="modes" data-group="mode">
+      <button data-val="punti" class="mode">
+        <span class="big">🍓</span><b>Acchiappa tutto</b><small>Fai punti e sali di livello</small>
+      </button>
+      <button data-val="parola" class="mode">
+        <span class="big">🔤</span><b>Acchiappa la parola</b><small>Prendi le lettere in ordine</small>
+      </button>
+    </div>
+
+    <div id="wordOpts" class="card">
+      <h3>Quale parola?</h3>
+      <div class="chips" data-group="wordChoice">
+        <button data-val="random">🎁 A sorpresa</button>
+        <button data-val="custom">✏️ La scelgo io</button>
+      </div>
+      <input id="customWord" maxlength="10" placeholder="Scrivi la parola, es. MAMMA" autocapitalize="characters" autocomplete="off" spellcheck="false">
+    </div>
+
+    <h2>Chi gioca?</h2>
+    <div class="chips" data-group="age">
+      <button data-val="mini">🐣 3–4 anni</button>
+      <button data-val="small">🐥 5–6 anni</button>
+      <button data-val="big">🦅 7+ anni</button>
+    </div>
+
+    <div class="row2">
+      <div class="card">
+        <h3>Minuti per round</h3>
+        <div class="stepper" data-step="minutes">
+          <button data-d="-1" aria-label="Meno">−</button><output id="outMinutes">2</output><button data-d="1" aria-label="Più">+</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Round per il premio</h3>
+        <div class="stepper" data-step="rounds">
+          <button data-d="-1" aria-label="Meno">−</button><output id="outRounds">3</output><button data-d="1" aria-label="Più">+</button>
+        </div>
+      </div>
+    </div>
+
+    <label class="toggle">
+      <input type="checkbox" id="showCam">
+      <span class="sw"></span>
+      <span>Mostra la telecamera dietro Penny</span>
+    </label>
+
+    <button id="btnPlay" class="play">Gioca! ▶</button>
+    <p class="hint">📱 Appoggia il telefono in piedi, fai 2 passi indietro e fai vedere bene le mani.<br>Le immagini della telecamera restano sul telefono: niente viene inviato.</p>
+  </div>
+</section>
+
+<!-- Pronti: alza le mani -->
+<section id="ready" class="screen hidden">
+  <div class="bubble">
+    <div id="readyTitle">Alza le mani! 🙌</div>
+    <div id="readyMsg">Sto accendendo la telecamera magica…</div>
+    <div class="ready-progress"><i id="readyFill"></i></div>
+  </div>
+  <div class="ready-actions">
+    <button id="btnStartNow" class="btn">Inizia ora ▶</button>
+    <button id="btnFinger" class="btn ghost hidden">Gioca col dito 👆</button>
+    <button id="btnBack1" class="btn ghost">↩ Menu</button>
+  </div>
+</section>
+
+<!-- Intro round / conto alla rovescia -->
+<section id="intro" class="screen center hidden">
+  <div class="intro-card">
+    <div id="introRound"></div>
+    <div id="introWord"></div>
+    <div id="introCount"></div>
+  </div>
+</section>
+
+<!-- Fine round -->
+<section id="roundEnd" class="screen center hidden">
+  <div class="panel">
+    <div class="panel-emoji">🎉</div>
+    <h2 id="reTitle">Round finito!</h2>
+    <p id="reText"></p>
+    <button id="btnNextRound" class="play">Prossimo round ▶</button>
+    <button id="btnBack2" class="btn ghost">↩ Menu</button>
+  </div>
+</section>
+
+<!-- Premio -->
+<section id="prize" class="screen center hidden">
+  <div class="panel prize">
+    <div class="prize-top">HAI VINTO!</div>
+    <div id="prizeEmoji" class="prize-emoji">🎁</div>
+    <div id="prizeText" class="prize-text">…</div>
+    <div id="prizeBonus" class="prize-bonus"></div>
+    <p id="prizeScore" class="prize-score"></p>
+    <button id="btnAgain" class="play">Gioca ancora 🔁</button>
+    <button id="btnBack3" class="btn ghost">↩ Menu</button>
+  </div>
+</section>
+
+<!-- Pausa -->
+<section id="pause" class="screen center hidden">
+  <div class="panel">
+    <div class="panel-emoji">😴</div>
+    <h2>Pausa</h2>
+    <button id="btnResume" class="play">Continua ▶</button>
+    <button id="btnRestart" class="btn">Ricomincia 🔁</button>
+    <button id="btnBack4" class="btn ghost">↩ Menu</button>
+  </div>
+</section>
+
+<!-- Errore telecamera -->
+<section id="camError" class="screen center hidden">
+  <div class="panel">
+    <div class="panel-emoji">📷</div>
+    <h2>Non vedo la telecamera</h2>
+    <p id="camErrText">Su iPhone apri Impostazioni › Safari › Fotocamera e scegli «Consenti», poi ricarica la pagina.</p>
+    <button id="btnFinger2" class="play">Gioca col dito 👆</button>
+    <button id="btnBack5" class="btn ghost">↩ Menu</button>
+  </div>
+</section>
+
+<script type="module" src="game.js"></script>
+</body>
+</html>
