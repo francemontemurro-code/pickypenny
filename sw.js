@@ -1,5 +1,5 @@
 // Service worker: prima la rete (così gli aggiornamenti arrivano subito), cache come riserva.
-const CACHE = 'pickypenny-v2';
+const CACHE = 'pickypenny-v3';
 const SHELL = ['./', './index.html', './style.css', './game.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon.svg'];
 
 self.addEventListener('install', (e) => {

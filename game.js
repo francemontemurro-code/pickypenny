@@ -10,9 +10,9 @@ const UI_FONT = '"Baloo 2","Arial Rounded MT Bold",system-ui,sans-serif';
 // ---------- difficoltà per età ----------
 const AGES = {
   // penny = larghezza spalle di Penny (frazione del lato corto dello schermo); avoidFrom = livello da cui compaiono gli oggetti da evitare
-  mini:  { speed: 0.15, size: 0.08,  target: 8,  maxObj: 4, spawn: 1.6, catchR: 0.075, penny: 0.2,  rightProb: 0.6, needEvery: 2.0, minLen: 3, maxLen: 4, helper: true,  patterns: [0.75, 0.25, 0],   avoidFrom: 2, avoidProb: 0.14 },
-  small: { speed: 0.21, size: 0.068, target: 12, maxObj: 6, spawn: 1.2, catchR: 0.062, penny: 0.18, rightProb: 0.5, needEvery: 2.6, minLen: 4, maxLen: 5, helper: false, patterns: [0.6, 0.3, 0.1],  avoidFrom: 1, avoidProb: 0.2 },
-  big:   { speed: 0.29, size: 0.058, target: 15, maxObj: 8, spawn: 0.9, catchR: 0.052, penny: 0.16, rightProb: 0.4, needEvery: 3.2, minLen: 5, maxLen: 6, helper: false, patterns: [0.5, 0.3, 0.2],  avoidFrom: 1, avoidProb: 0.26 },
+  mini:  { speed: 0.15, size: 0.08,  target: 8,  maxObj: 4, spawn: 1.6, catchR: 0.09,  penny: 0.2,  rightProb: 0.6, needEvery: 2.0, minLen: 3, maxLen: 4, helper: true,  patterns: [0.75, 0.25, 0],   avoidFrom: 2, avoidProb: 0.14 },
+  small: { speed: 0.21, size: 0.068, target: 12, maxObj: 6, spawn: 1.2, catchR: 0.076, penny: 0.18, rightProb: 0.5, needEvery: 2.6, minLen: 4, maxLen: 5, helper: false, patterns: [0.6, 0.3, 0.1],  avoidFrom: 1, avoidProb: 0.2 },
+  big:   { speed: 0.29, size: 0.058, target: 15, maxObj: 8, spawn: 0.9, catchR: 0.064, penny: 0.16, rightProb: 0.4, needEvery: 3.2, minLen: 5, maxLen: 6, helper: false, patterns: [0.5, 0.3, 0.2],  avoidFrom: 1, avoidProb: 0.26 },
 };
 const AVOID = ['🌵', '🌧️', '🦔'];
 const MINUTES = [0.5, 1, 2, 3, 4, 5, 7, 10];
@@ -79,7 +79,7 @@ function cleanWord(s) {
 }
 
 // ---------- impostazioni ----------
-const DEFAULTS = { mode: 'punti', age: 'mini', minutes: 2, rounds: 3, wordChoice: 'random', customWord: '', showCam: true, catchMode: 'mano', avoid: true };
+const DEFAULTS = { mode: 'punti', age: 'mini', minutes: 2, rounds: 3, wordChoice: 'random', customWord: '', showCam: true, catchMode: 'mano', avoid: true, pennySize: 'media' };
 let S = { ...DEFAULTS };
 try { S = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('pickypenny.settings') || '{}') }; } catch (e) { /* storage non disponibile */ }
 function saveSettings() { try { localStorage.setItem('pickypenny.settings', JSON.stringify(S)); } catch (e) { /* ignora */ } }
@@ -254,7 +254,7 @@ function updatePose(now) {
     for (let i = 0; i < pts.length; i++) {
       const a = SP[i], b = pts[i];
       const d = Math.hypot(b.x - a.x, b.y - a.y);
-      const k = clamp(d / (MIN * 0.04), 0.35, 0.9); // movimenti veloci: meno ritardo
+      const k = clamp(d / (MIN * 0.03), 0.55, 0.95); // movimenti veloci: quasi nessun ritardo
       a.x += (b.x - a.x) * k; a.y += (b.y - a.y) * k; a.v += (b.v - a.v) * 0.5;
     }
   }
@@ -262,10 +262,14 @@ function updatePose(now) {
 }
 const personVisible = (now) => SP && now - lastPoseAt < 500;
 
-// Penny ha sempre la stessa grandezza sullo schermo, anche se chi gioca è vicinissimo
-// alla telecamera: il corpo viene rimpicciolito e messo al centro, e spostandosi a
-// destra/sinistra Penny attraversa lo schermo (movimento amplificato).
-const NB = { k: 0, cx: 0, cy: 0, baseY: 0, last: -1e9 };
+// Penny segue il corpo in modo naturale, ma se chi gioca è troppo vicino alla telecamera
+// viene "rimpicciolita" fino alla grandezza scelta nel menu (mai ingrandita).
+// Più è rimpicciolita, più il movimento laterale viene amplificato, così si raggiunge tutto lo schermo.
+// Le braccia sono un po' elastiche (più lunghe del vero) per arrivare agli oggetti senza fatica.
+const PENNY_SIZE = { piccola: 0.2, media: 0.28, grande: 0.38 };
+const REACH = 1.3;
+const ARMS = [[11, [13, 15, 17, 19, 21]], [12, [14, 16, 18, 20, 22]]];
+const NB = { k: 1, baseY: 0, last: -1e9 };
 function normalizeBody(raw, now) {
   const ls = raw[11], rs = raw[12];
   let cx, cy, sw;
@@ -276,21 +280,28 @@ function normalizeBody(raw, now) {
     cx = (raw[7].x + raw[8].x) / 2; cy = (raw[7].y + raw[8].y) / 2 + ew * 1.4; sw = ew * 2.3;
   } else return null;
   if (sw < 4) return null;
-  const target = MIN * A().penny;
-  const k = target / sw;
-  const fresh = now - NB.last > 800;
+  const target = MIN * (PENNY_SIZE[S.pennySize] || PENNY_SIZE.media);
+  const k = Math.min(1, target / sw);
+  if (now - NB.last > 800) { NB.k = k; NB.baseY = cy; }
+  else { NB.k += (k - NB.k) * 0.08; NB.baseY += (cy - NB.baseY) * 0.02; }
   NB.last = now;
-  if (fresh) { NB.k = k; NB.cx = cx; NB.cy = cy; NB.baseY = cy; }
-  else {
-    NB.k += (k - NB.k) * 0.12;        // la grandezza cambia piano (niente zoom a scatti)
-    NB.cx += (cx - NB.cx) * 0.6;
-    NB.cy += (cy - NB.cy) * 0.6;
-    NB.baseY += (cy - NB.baseY) * 0.02; // altezza "normale" di chi gioca, si adatta lentamente
+  const z = NB.k, shrink = 1 - z;
+  const gain = clamp(1 + (1 / z - 1) * 0.45, 1, 2);
+  const ax = W / 2 + (cx - W / 2) * gain;
+  const ay = cy * z + (H * 0.5 + (cy - NB.baseY) * 1.3) * shrink; // vicino: spalle verso metà schermo
+  const out = raw.map((p) => ({ x: ax + (p.x - cx) * z, y: ay + (p.y - cy) * z, v: p.v }));
+  for (const [sh, ids] of ARMS) { // braccia elastiche
+    const o = out[sh];
+    for (const i of ids) { out[i].x = o.x + (out[i].x - o.x) * REACH; out[i].y = o.y + (out[i].y - o.y) * REACH; }
   }
-  const margin = target * 1.1;
-  const ax = clamp(W / 2 + (NB.cx - W / 2) * 2.2, margin, W - margin);
-  const ay = clamp(H * 0.5 + (NB.cy - NB.baseY) * NB.k * 1.5, H * 0.3, H * 0.7); // salti e piegamenti
-  return raw.map((p) => ({ x: ax + (p.x - NB.cx) * NB.k, y: ay + (p.y - NB.cy) * NB.k, v: p.v }));
+  // Penny non esce dallo schermo: se sborda, la spingo dentro tutta insieme
+  const xs = out.filter((p) => p.v > 0.4).map((p) => p.x);
+  if (xs.length) {
+    const lo = Math.min(...xs), hi = Math.max(...xs), m = MIN * 0.03;
+    const dx = lo < m ? m - lo : hi > W - m ? (W - m) - hi : 0;
+    if (dx && hi - lo < W - 2 * m) out.forEach((p) => { p.x += dx; });
+  }
+  return out;
 }
 
 function handPoint(side) {
@@ -403,6 +414,11 @@ function updateWordBar() {
 }
 
 // ---------- oggetti ----------
+function pennyCenter() {
+  if (!personVisible(performance.now())) return null;
+  const a = SP[11], b = SP[12];
+  return (a.v > 0.4 && b.v > 0.4) ? (a.x + b.x) / 2 : SP[0].x;
+}
 function spawn(forceNeeded = false) {
   const a = A(), sm = speedMul();
   const sp = a.speed * H * sm;
@@ -431,7 +447,9 @@ function spawn(forceNeeded = false) {
   const f = o.fast || 1;
   const pr = Math.random(), [pFall, pSide] = a.patterns;
   if (pr < pFall) { // cade dall'alto
-    o.x = rand(W * 0.1, W * 0.9); o.y = -o.r;
+    const pc = pennyCenter();
+    o.x = pc && Math.random() < 0.5 ? clamp(pc + rand(-0.3, 0.3) * MIN, W * 0.08, W * 0.92) : rand(W * 0.1, W * 0.9);
+    o.y = -o.r;
     o.vx = rand(-0.15, 0.15) * sp; o.vy = sp * rand(0.8, 1.15) * f; o.g = sp * 0.15;
   } else if (pr < pFall + pSide) { // vola di lato
     const left = Math.random() < 0.5;

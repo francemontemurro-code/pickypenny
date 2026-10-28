@@ -144,3 +144,5 @@ h2 + .chips button.on{background:var(--sun);color:var(--ink);box-shadow:0 4px 0 
   padding:12px 26px;font-size:clamp(28px,8vw,44px);font-weight:800;text-align:center;box-shadow:0 8px 0 rgba(0,0,0,.2);pointer-events:none;
   animation:pop .6s ease-out;white-space:nowrap}
 #banner small{display:block;font-size:.5em;color:var(--muted)}
+
+.hint.left{text-align:left;margin:8px 4px 0;font-size:14px}
