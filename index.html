@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Picky Penny">
 <meta name="theme-color" content="#2a1a6e">
-<meta name="description" content="Picky Penny: muoviti davanti al telefono e acchiappa al volo oggetti e lettere. Un gioco per i più piccoli.">
+<meta name="description" content="Picky Penny: muoviti davanti al telefono e acchiappa al volo oggetti, lettere e numeri. Un gioco per i più piccoli.">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
@@ -26,41 +26,51 @@
 <div id="hud" class="hidden">
   <div class="hud-left">
     <div class="pill score" id="hudScore">⭐ 0</div>
-    <div class="pill" id="hudLevel">Livello 1</div>
+    <div class="pill combo hidden" id="hudCombo">🔥 0</div>
+    <div class="pill small" id="hudLevel">🌼 Livello 1</div>
     <div id="levelBar" class="levelbar"><i></i></div>
+    <div id="hud2p" class="pill small hidden"></div>
   </div>
   <div class="hud-right">
-    <div class="pill" id="hudRound">Round 1/3</div>
+    <div class="pill small" id="hudRound">Round 1/3</div>
     <div class="pill time" id="hudTime">2:00</div>
     <button id="btnPause" class="pill btn-icon" aria-label="Pausa">⏸</button>
+    <div id="hudPowers"></div>
   </div>
 </div>
-
-<div id="wordBar" class="hidden">
-  <span id="wordEmoji"></span>
-  <div id="wordTiles"></div>
+<div id="taskBar" class="hidden"></div>
+<div id="eventCard" class="hidden">
+  <div class="ev-row"><span id="evEmoji"></span><b id="evText"></b></div>
+  <div id="evProg"></div>
+  <div class="ev-time"><i id="evBar"></i></div>
 </div>
-
 <div id="banner" class="hidden"></div>
 
-<!-- Menu iniziale -->
-<section id="setup" class="screen scroll">
-  <div class="setup-inner">
-    <div class="logo-wrap">
-      <div class="logo-fly">🍓</div><div class="logo-fly f2">⭐</div><div class="logo-fly f3">🎈</div>
-      <h1 class="logo">Picky<br>Penny</h1>
-      <p class="tag">Muoviti davanti al telefono e acchiappa tutto al volo!</p>
+<!-- Home -->
+<section id="home" class="screen scroll menu-bg">
+  <div class="setup-inner home">
+    <div class="topbar">
+      <div class="pill coins">🪙 0</div>
+      <div class="pill streak hidden" id="homeStreak">🔥 0</div>
     </div>
+    <h1 class="logo">Picky<br>Penny</h1>
+    <canvas id="homePenny" class="penny-preview" aria-label="Penny"></canvas>
+    <button class="play" data-open="setup">Gioca! ▶</button>
+    <div class="home-grid">
+      <button class="home-btn" data-open="album"><span>📒</span><b>Album</b><small id="homeAlbumCount">0/24</small></button>
+      <button class="home-btn" data-open="wardrobe"><span>👕</span><b>Vestiti</b><small>di Penny</small></button>
+      <button class="home-btn" id="homeChallBtn" data-open="challenges"><span>🏅</span><b>Sfide</b><small id="homeChallCount">0/3</small></button>
+    </div>
+    <p class="hint">📱 Appoggia il telefono in piedi, fai 2 passi indietro e fai vedere bene le mani.<br>Le immagini della telecamera restano sul telefono: niente viene inviato.</p>
+  </div>
+</section>
 
-    <h2>Come giochiamo?</h2>
-    <div class="modes" data-group="mode">
-      <button data-val="punti" class="mode">
-        <span class="big">🍓</span><b>Acchiappa tutto</b><small>Fai punti e sali di livello</small>
-      </button>
-      <button data-val="parola" class="mode">
-        <span class="big">🔤</span><b>Acchiappa la parola</b><small>Prendi le lettere in ordine</small>
-      </button>
-    </div>
+<!-- Impostazioni della partita -->
+<section id="setup" class="screen scroll menu-bg hidden">
+  <div class="setup-inner">
+    <div class="topbar"><button class="back" data-open="home">‹ Indietro</button></div>
+    <h2 class="first">A cosa giochiamo?</h2>
+    <div class="modes six" id="modeGrid"></div>
 
     <div id="wordOpts" class="card">
       <h3>Quale parola?</h3>
@@ -77,19 +87,19 @@
       <button data-val="small">🐥 5–6 anni</button>
       <button data-val="big">🦅 7+ anni</button>
     </div>
+    <div class="chips gap" data-group="players">
+      <button data-val="1">👤 Da solo</button>
+      <button data-val="2">👥 In due, insieme</button>
+    </div>
 
     <div class="row2">
       <div class="card">
         <h3>Minuti per round</h3>
-        <div class="stepper" data-step="minutes">
-          <button data-d="-1" aria-label="Meno">−</button><output id="outMinutes">2</output><button data-d="1" aria-label="Più">+</button>
-        </div>
+        <div class="stepper" data-step="minutes"><button data-d="-1" aria-label="Meno">−</button><output id="outMinutes">2</output><button data-d="1" aria-label="Più">+</button></div>
       </div>
       <div class="card">
         <h3>Round per il premio</h3>
-        <div class="stepper" data-step="rounds">
-          <button data-d="-1" aria-label="Meno">−</button><output id="outRounds">3</output><button data-d="1" aria-label="Più">+</button>
-        </div>
+        <div class="stepper" data-step="rounds"><button data-d="-1" aria-label="Meno">−</button><output id="outRounds">3</output><button data-d="1" aria-label="Più">+</button></div>
       </div>
     </div>
 
@@ -105,21 +115,49 @@
       <button data-val="media">🐱 Media</button>
       <button data-val="grande">🐻 Grande</button>
     </div>
-    <p class="hint left">Piccola = devi muoverti di più per arrivare ovunque. Grande = più facile, Penny ti somiglia di più.</p>
+    <p class="hint left">Piccola = devi muoverti di più. Grande = più facile, Penny ti somiglia di più.</p>
 
-    <label class="toggle" id="avoidRow">
-      <input type="checkbox" id="avoid">
-      <span class="sw"></span>
-      <span>Oggetti da evitare 🌵 🌧️ 🦔 (toccarli toglie punti)</span>
-    </label>
-    <label class="toggle">
-      <input type="checkbox" id="showCam">
-      <span class="sw"></span>
-      <span>Mostra la telecamera in un angolo</span>
-    </label>
+    <label class="toggle" id="avoidRow"><input type="checkbox" id="avoid"><span class="sw"></span><span>Oggetti da evitare (cerchio rosso: toccarli toglie punti)</span></label>
+    <label class="toggle"><input type="checkbox" id="music"><span class="sw"></span><span>Musica 🎵</span></label>
+    <label class="toggle"><input type="checkbox" id="showCam"><span class="sw"></span><span>Mostra la telecamera in un angolo</span></label>
 
     <button id="btnPlay" class="play">Gioca! ▶</button>
-    <p class="hint">📱 Appoggia il telefono in piedi, fai 2 passi indietro e fai vedere bene le mani.<br>Le immagini della telecamera restano sul telefono: niente viene inviato.</p>
+  </div>
+</section>
+
+<!-- Album -->
+<section id="album" class="screen scroll menu-bg hidden">
+  <div class="setup-inner">
+    <div class="topbar"><button class="back" data-open="home">‹ Indietro</button><div class="pill">📒 <span id="albumCount">0</span></div></div>
+    <h2 class="first">L’album delle figurine</h2>
+    <div class="progress"><i id="albumBar"></i></div>
+    <div id="albumGrid" class="album-grid"></div>
+    <p class="hint" id="albumHint"></p>
+  </div>
+</section>
+
+<!-- Guardaroba -->
+<section id="wardrobe" class="screen scroll menu-bg hidden">
+  <div class="setup-inner">
+    <div class="topbar"><button class="back" data-open="home">‹ Indietro</button><div class="pill coins">🪙 0</div></div>
+    <h2 class="first">I vestiti di Penny</h2>
+    <canvas id="wardPenny" class="penny-preview ward"></canvas>
+    <div id="wardTabs" class="tabs"></div>
+    <div id="wardItems" class="ward-grid"></div>
+    <p class="hint">Le monetine 🪙 si guadagnano giocando: ogni 8 punti, sfide lampo, pentolacce, «Penny dice» e sfide del giorno.</p>
+  </div>
+</section>
+
+<!-- Sfide -->
+<section id="challenges" class="screen scroll menu-bg hidden">
+  <div class="setup-inner">
+    <div class="topbar"><button class="back" data-open="home">‹ Indietro</button></div>
+    <h2 class="first">Le sfide di oggi</h2>
+    <p class="streak-line" id="challStreak"></p>
+    <div id="challList"></div>
+    <p class="hint" id="challBonus"></p>
+    <h2>I tuoi record</h2>
+    <div id="recList" class="card"></div>
   </div>
 </section>
 
@@ -133,11 +171,11 @@
   <div class="ready-actions">
     <button id="btnStartNow" class="btn">Inizia ora ▶</button>
     <button id="btnFinger" class="btn ghost hidden">Gioca col dito 👆</button>
-    <button id="btnBack1" class="btn ghost">↩ Menu</button>
+    <button class="btn ghost" data-menu>↩ Menu</button>
   </div>
 </section>
 
-<!-- Intro round / conto alla rovescia -->
+<!-- Intro round -->
 <section id="intro" class="screen center hidden">
   <div class="intro-card">
     <div id="introRound"></div>
@@ -153,20 +191,24 @@
     <h2 id="reTitle">Round finito!</h2>
     <p id="reText"></p>
     <button id="btnNextRound" class="play">Prossimo round ▶</button>
-    <button id="btnBack2" class="btn ghost">↩ Menu</button>
+    <button class="btn ghost" data-menu>↩ Menu</button>
   </div>
 </section>
 
 <!-- Premio -->
 <section id="prize" class="screen center hidden">
   <div class="panel prize">
-    <div class="prize-top">HAI VINTO!</div>
+    <div class="prize-top" id="prizeTop">HAI VINTO!</div>
     <div id="prizeEmoji" class="prize-emoji">🎁</div>
     <div id="prizeText" class="prize-text">…</div>
+    <div id="prizeNew" class="prize-new"></div>
     <div id="prizeBonus" class="prize-bonus"></div>
     <p id="prizeScore" class="prize-score"></p>
     <button id="btnAgain" class="play">Gioca ancora 🔁</button>
-    <button id="btnBack3" class="btn ghost">↩ Menu</button>
+    <div class="row-btns">
+      <button id="btnPrizeAlbum" class="btn">📒 Album</button>
+      <button class="btn ghost" data-menu>↩ Menu</button>
+    </div>
   </div>
 </section>
 
@@ -177,7 +219,7 @@
     <h2>Pausa</h2>
     <button id="btnResume" class="play">Continua ▶</button>
     <button id="btnRestart" class="btn">Ricomincia 🔁</button>
-    <button id="btnBack4" class="btn ghost">↩ Menu</button>
+    <button class="btn ghost" data-menu>↩ Menu</button>
   </div>
 </section>
 
@@ -188,10 +230,10 @@
     <h2>Non vedo la telecamera</h2>
     <p id="camErrText">Su iPhone apri Impostazioni › Safari › Fotocamera e scegli «Consenti», poi ricarica la pagina.</p>
     <button id="btnFinger2" class="play">Gioca col dito 👆</button>
-    <button id="btnBack5" class="btn ghost">↩ Menu</button>
+    <button class="btn ghost" data-menu>↩ Menu</button>
   </div>
 </section>
 
-<script type="module" src="game.js"></script>
+<script type="module" src="js/game.js"></script>
 </body>
 </html>

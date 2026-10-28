@@ -1,6 +1,6 @@
 // Service worker: prima la rete (così gli aggiornamenti arrivano subito), cache come riserva.
-const CACHE = 'pickypenny-v3';
-const SHELL = ['./', './index.html', './style.css', './game.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon.svg'];
+const CACHE = 'pickypenny-v4';
+const SHELL = ['./', './index.html', './style.css', './js/game.js', './js/core.js', './js/data.js', './js/store.js', './js/audio.js', './js/pose.js', './js/draw.js', './js/modes.js', './js/ui.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
