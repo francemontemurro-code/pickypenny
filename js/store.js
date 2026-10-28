@@ -11,7 +11,7 @@ function save(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } ca
 
 export const DEFAULTS = {
   mode: 'punti', age: 'mini', minutes: 2, rounds: 3, wordChoice: 'random', customWord: '',
-  showCam: true, catchMode: 'mano', avoid: true, pennySize: 'media', players: 1, music: true,
+  showCam: true, catchMode: 'mano', avoid: true, pennySize: 'media', players: 1, music: true, vibe: 'tranquilla',
 };
 export const S = load(SKEY, DEFAULTS);
 export const saveSettings = () => save(SKEY, S);

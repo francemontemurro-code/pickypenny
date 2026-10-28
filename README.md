@@ -15,6 +15,14 @@ Gioco per i più piccoli che usa la **telecamera frontale** del telefono: chi gi
 
 Negli ultimi cinque, quando prendi la cosa sbagliata quella rimbalza via, senza togliere punti.
 
+## Calma o festa
+
+Nel menu «Quante sorprese?»:
+- **🧘 Tranquilla** (di partenza): una sorpresa alla volta e rara (circa ogni 40 secondi), poteri rari e solo in «Acchiappa tutto», Penny parla solo per spiegare.
+- **🎉 Festa**: sorprese e poteri più frequenti, un po' di tifo.
+
+In entrambi i casi: mai due sorprese insieme, durante la pentolaccia lo schermo si svuota, a ogni nuovo livello c'è una breve pausa, e sfide del giorno e record vengono festeggiati a fine round invece che durante il gioco.
+
 ## Cosa rende la partita più divertente
 
 - **6 mondi**, uno nuovo a ogni livello: Prato 🌼, Mare 🌊, Giungla 🌴, Polo Nord ❄️, Paese dei Dolci 🍭, Spazio 🚀, ognuno con i suoi oggetti, sfondo animato e musica.

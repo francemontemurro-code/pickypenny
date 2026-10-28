@@ -2,9 +2,9 @@
 
 export const AGES = {
   // penny = larghezza spalle massima di Penny (frazione del lato corto); avoidFrom = livello da cui compaiono gli oggetti da evitare
-  mini:  { speed: 0.15, size: 0.08,  target: 8,  maxObj: 4, spawn: 1.6, catchR: 0.09,  rightProb: 0.6, needEvery: 2.0, minLen: 3, maxLen: 4, helper: true,  patterns: [0.75, 0.25, 0],  avoidFrom: 2, avoidProb: 0.14, sayTime: 9, numMax: 5,  count: [1, 4] },
-  small: { speed: 0.21, size: 0.068, target: 12, maxObj: 6, spawn: 1.2, catchR: 0.076, rightProb: 0.5, needEvery: 2.6, minLen: 4, maxLen: 5, helper: false, patterns: [0.6, 0.3, 0.1], avoidFrom: 1, avoidProb: 0.2,  sayTime: 7, numMax: 10, count: [2, 7] },
-  big:   { speed: 0.29, size: 0.058, target: 15, maxObj: 8, spawn: 0.9, catchR: 0.064, rightProb: 0.4, needEvery: 3.2, minLen: 5, maxLen: 6, helper: false, patterns: [0.5, 0.3, 0.2], avoidFrom: 1, avoidProb: 0.26, sayTime: 6, numMax: 15, count: [4, 10] },
+  mini:  { speed: 0.15, size: 0.08,  target: 8,  maxObj: 3, spawn: 1.6, catchR: 0.09,  rightProb: 0.6, needEvery: 2.0, minLen: 3, maxLen: 4, helper: true,  patterns: [0.75, 0.25, 0],  avoidFrom: 2, avoidProb: 0.14, sayTime: 9, numMax: 5,  count: [1, 4] },
+  small: { speed: 0.21, size: 0.068, target: 12, maxObj: 5, spawn: 1.2, catchR: 0.076, rightProb: 0.5, needEvery: 2.6, minLen: 4, maxLen: 5, helper: false, patterns: [0.6, 0.3, 0.1], avoidFrom: 1, avoidProb: 0.2,  sayTime: 7, numMax: 10, count: [2, 7] },
+  big:   { speed: 0.29, size: 0.058, target: 15, maxObj: 6, spawn: 0.9, catchR: 0.064, rightProb: 0.4, needEvery: 3.2, minLen: 5, maxLen: 6, helper: false, patterns: [0.5, 0.3, 0.2], avoidFrom: 1, avoidProb: 0.26, sayTime: 6, numMax: 15, count: [4, 10] },
 };
 export const MINUTES = [0.5, 1, 2, 3, 4, 5, 7, 10];
 export const PENNY_SIZE = { piccola: 0.2, media: 0.28, grande: 0.38 };

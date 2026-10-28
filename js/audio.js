@@ -73,7 +73,7 @@ export function musicStart(root = 60) {
   M.root = root; M.pat = Math.floor(Math.random() * PATTERNS.length);
   if (!M.on) { M.on = true; M.next = AC.currentTime + 0.05; M.timer = setInterval(schedule, 60); }
   musicGain.gain.cancelScheduledValues(AC.currentTime);
-  musicGain.gain.setTargetAtTime(0.35, AC.currentTime, 0.3);
+  musicGain.gain.setTargetAtTime(0.2, AC.currentTime, 0.3);
 }
 export function musicStop() {
   if (!M.on || !AC) return;
@@ -92,19 +92,28 @@ function pickVoice() {
     || v.find((x) => /^it[-_]IT/i.test(x.lang)) || v.find((x) => /^it/i.test(x.lang)) || null;
 }
 if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+// Una sola voce alla volta: prio 2 = istruzioni importanti, 1 = normale, 0 = piccoli commenti.
+// Un commento non interrompe mai un'istruzione: se Penny sta parlando, viene saltato.
 let lastSay = 0;
-export function say(text, { rate = 0.95, pitch = 1.15, interrupt = true } = {}) {
+const cur = { prio: -1, until: 0 };
+export function say(text, { rate = 0.95, pitch = 1.15, prio = 1 } = {}) {
   if (!('speechSynthesis' in window)) return;
+  const now = performance.now();
+  const busy = now < cur.until;
+  if (busy && (prio === 0 || prio < cur.prio)) return;
   try {
-    if (interrupt) speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text.replace(/[^\p{L}\p{N}\s!?,.:;'’«»-]/gu, ''));
+    speechSynthesis.cancel();
+    const clean = text.replace(/[^\p{L}\p{N}\s!?,.:;'’«»-]/gu, '');
+    const u = new SpeechSynthesisUtterance(clean);
     u.lang = 'it-IT'; if (itVoice) u.voice = itVoice; u.rate = rate; u.pitch = pitch;
-    speechSynthesis.speak(u); lastSay = performance.now();
+    u.onend = () => { cur.until = 0; };
+    cur.prio = prio; cur.until = now + (500 + clean.length * 75) / rate;
+    speechSynthesis.speak(u); lastSay = now;
   } catch (e) { /* voce non disponibile */ }
 }
-export function stopVoice() { if ('speechSynthesis' in window) speechSynthesis.cancel(); }
-// Tifo ogni tanto, senza coprire le istruzioni importanti
-export function cheer(force = false) {
-  if (!force && performance.now() - lastSay < 3500) return;
-  if (force || Math.random() < 0.5) say(pick(CHEERS), { rate: 1.05, pitch: 1.25 });
+export function stopVoice() { cur.until = 0; if ('speechSynthesis' in window) speechSynthesis.cancel(); }
+// Tifo: raro, e solo quando Penny è in silenzio da un po'
+export function cheer() {
+  if (performance.now() - lastSay < 9000) return;
+  if (Math.random() < 0.5) say(pick(CHEERS), { rate: 1.05, pitch: 1.25, prio: 0 });
 }

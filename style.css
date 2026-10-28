@@ -243,3 +243,4 @@ h2.first{margin-top:10px}
 #introWord .w.long{font-size:clamp(30px,9vw,56px);letter-spacing:1px;word-break:break-word;padding:0 8px}
 #taskBar .tiles{flex-wrap:nowrap}
 .tile.more{background:transparent;color:var(--muted);width:auto;padding:0 2px}
+.news{margin-top:8px;background:#e6fff5;color:#137a5c;border-radius:12px;padding:6px 10px;font-size:15px;font-weight:700;line-height:1.25}

@@ -42,6 +42,7 @@ canvas.addEventListener('pointerleave', () => { pointer.active = false; });
 const BQ = []; let bannerBusy = false, bannerTimer = null;
 function banner(html, ms = 1800, urgent = false) {
   if (urgent) { BQ.length = 0; clearTimeout(bannerTimer); bannerBusy = false; }
+  if (BQ.length >= 1) BQ.shift(); // al massimo uno in attesa: i vecchi si scartano
   BQ.push({ html, ms }); if (!bannerBusy) nextBanner();
 }
 function nextBanner() {
@@ -53,16 +54,18 @@ function nextBanner() {
 }
 function clearBanners() { BQ.length = 0; clearTimeout(bannerTimer); bannerBusy = false; hide('#banner'); }
 
+// Le sfide del giorno completate non interrompono il gioco: si festeggiano a fine round.
+const pendingNews = [];
 onMissionDone((list, all) => {
-  if (G.phase === 'menu') return;
-  SFX.coin();
-  list.forEach(({ def, m }) => banner(`🏅 Sfida del giorno!<small>${def.text(m.target)} · +15 🪙</small>`, 2400));
-  if (all) {
-    const { st } = drawSticker();
-    banner(`🎁 Tutte le sfide di oggi!<small>Figurina in regalo: ${st.e} ${st.n}</small>`, 3000);
-    say(`Hai completato tutte le sfide di oggi! Ecco una figurina in regalo!`, { interrupt: false });
-  }
+  list.forEach(({ def, m }) => pendingNews.push(`🏅 Sfida del giorno: ${def.text(m.target)} · +15 🪙`));
+  if (all) { const { st } = drawSticker(); pendingNews.push(`🎁 Tutte le sfide di oggi! Figurina in regalo: ${st.e} ${st.n}`); }
 });
+function takeNews() { const h = pendingNews.map((t) => `<div class="news">${t}</div>`).join(''); pendingNews.length = 0; return h; }
+const festa = () => S.vibe === 'festa';
+// Ritmo delle sorprese: in modalità tranquilla sono rare
+function eventDelay() { const d = festa() ? rand(25, 32) : rand(38, 50); return M.learn ? d * 1.3 : d; }
+function powerDelay() { return festa() ? rand(18, 26) : rand(30, 42); }
+const powersAllowed = () => !M.learn || festa();
 
 // ---------- HUD ----------
 let hudKey = '';
@@ -197,18 +200,17 @@ function addPoints(n, x, y, color = '#fff', label) {
   G.score += pts;
   if (!M.learn) G.levelPts += n; // il livello sale coi punti "veri", non con il moltiplicatore
   popup(x, y, label || `+${pts}`, color, pts > 2 ? 1.2 : 1);
-  if (G.record > 0 && !G.recordBeaten && G.score > G.record) {
-    G.recordBeaten = true; SFX.win(); confetti(60);
-    banner('🏆 Nuovo record!<small>Hai battuto il tuo punteggio migliore</small>', 2200);
-    say('Nuovo record!', { interrupt: false });
-  }
+  if (G.record > 0 && !G.recordBeaten && G.score > G.record) G.recordBeaten = true; // si festeggia alla fine
 }
 function comboUp() {
   G.combo++; G.comboBest = Math.max(G.comboBest, G.combo);
   stat('comboMax', G.combo, true);
-  if (G.combo === 5) { SFX.combo(); banner('⚡ Super Penny!<small>Punti ×2 finché non sbagli</small>', 1800); cheer(true); }
-  else if (G.combo === 12) { SFX.combo(); confetti(50); banner('🌟 Mega Penny!<small>Punti ×3!</small>', 1800); say('Mega Penny!'); }
-  else if (G.combo > 5 && G.combo % 10 === 0) cheer(true);
+  if (G.combo === 5 || G.combo === 12) {
+    SFX.combo();
+    const p = activePlayers(performance.now())[0], h = p && p.SP[0];
+    popup(h ? h.x : V.W / 2, h ? h.y - V.MIN * 0.12 : V.H * 0.4, G.combo === 5 ? '⚡ ×2' : '🌟 ×3', '#ffd23f', 1.2);
+    if (festa()) cheer();
+  }
 }
 function comboBreak(x, y) {
   if (G.combo >= 5) popup(x, y - V.MIN * 0.08, 'Combo persa', '#ffb3c7', 0.8);
@@ -224,8 +226,8 @@ function onCatch(o, c) {
     o.dead = true;
     const lost = Math.min(2, G.score);
     G.score -= lost; G.levelPts = Math.max(0, G.levelPts - lost);
-    G.frozen = 1.0; FX.shake = 0.5;
-    SFX.ouch(); burst(o.x, o.y, '#9be7ff', 18);
+    G.frozen = 1.0; FX.shake = 0.25;
+    SFX.ouch(); burst(o.x, o.y, '#9be7ff', 10);
     popup(o.x, o.y, lost ? `Ahi! -${lost}` : 'Ahi!', '#9be7ff');
     setExpr(c.pi, 'ouch', 1); comboBreak(o.x, o.y);
     if (G.event && G.event.type === 'flash' && G.event.def.id === 'dodge') G.event.failed = true;
@@ -244,7 +246,7 @@ function onCatch(o, c) {
     addPoints(1, o.x, o.y, o.color || '#fff', o.label ? `${o.label}` : undefined);
     setExpr(c.pi, 'happy');
     stat('learnWin');
-    if (res.say) say(res.say, { rate: 1.05 });
+    if (res.say) say(res.say, { rate: 1.05, prio: 0 });
     renderTaskBar(); updateHUD(true);
     if (res.done) taskDone(res);
     return;
@@ -253,11 +255,11 @@ function onCatch(o, c) {
   o.dead = true; if (p) p.catches++;
   G.catchCount++;
   comboUp();
-  if (o.star) { SFX.star(); burst(o.x, o.y, '#ffd23f', 26); addPoints(o.pts, o.x, o.y, '#ffd23f', `+${o.pts * mult()} ⭐`); stat('stars'); }
-  else { SFX.catch(G.combo); burst(o.x, o.y); addPoints(o.pts || 1, o.x, o.y); }
+  if (o.star) { SFX.star(); burst(o.x, o.y, '#ffd23f', 14); addPoints(o.pts, o.x, o.y, '#ffd23f', `+${o.pts * mult()} ⭐`); stat('stars'); }
+  else { SFX.catch(G.combo); burst(o.x, o.y, null, 8); addPoints(o.pts || 1, o.x, o.y); }
   stat('catch');
   setExpr(c.pi, 'happy', 0.5);
-  if (G.catchCount % 7 === 0) cheer();
+  if (festa() && G.catchCount % 12 === 0) cheer();
   const ev = G.event;
   if (ev && ev.type === 'flash') {
     if (ev.def.id === 'any' || (ev.def.id === 'stars' && o.star)) { ev.prog++; updateEventCard(); }
@@ -277,10 +279,12 @@ function enterWorld() {
 function levelUp() {
   G.level++; G.levelPts = 0;
   const w = enterWorld();
-  SFX.level(); confetti(70);
+  SFX.level(); confetti(30);
+  G.hold = Math.max(G.hold, 1.8); // pausa: si svuota lo schermo e si entra nel nuovo mondo
+  G.objs.forEach((o) => { if (o.kind === 'item') o.dying = 0.0001; });
   const newAvoid = S.avoid && G.level === A().avoidFrom && G.level > 1;
-  banner(`${w.e} ${w.name}!<small>Livello ${G.level} · ${newAvoid ? 'non toccare quelli col cerchio rosso!' : 'più veloce!'}</small>`, 2400);
-  say(newAvoid ? `Livello ${G.level}! ${w.name}! Attenzione: non toccare quelli col cerchio rosso!` : `Livello ${G.level}! ${w.name}!`);
+  banner(`${w.e} ${w.name}!<small>Livello ${G.level} · ${newAvoid ? 'non toccare quelli col cerchio rosso!' : 'più veloce!'}</small>`, 1800, true);
+  say(newAvoid ? `Livello ${G.level}! ${w.name}! Attenzione: non toccare quelli col cerchio rosso!` : `Livello ${G.level}! ${w.name}!`, { prio: 2 });
 }
 async function taskDone(res) {
   const s = G.session;
@@ -289,16 +293,16 @@ async function taskDone(res) {
   G.hold = 4.2;
   G.score += 3 * mult();
   const lv = !M.levelEvery || G.tasksDone % M.levelEvery === 0;
-  SFX.level(); confetti(80);
+  SFX.level(); confetti(40);
   banner(res.doneBanner, 2200, true);
-  say(res.doneSay);
+  say(res.doneSay, { prio: 2 });
   if (lv) { G.level++; enterWorld(); }
   await sleep(2400); if (s !== G.session || G.phase !== 'play') return;
   M.newTask(G);
   const an = M.announce(G, false);
   renderTaskBar();
   banner(an.banner, 2200);
-  say(an.say, { rate: 0.88 });
+  say(an.say, { rate: 0.88, prio: 2 });
 }
 
 // ---------- poteri ----------
@@ -306,16 +310,15 @@ function activatePower(o, c) {
   o.dead = true;
   const def = POWERS[o.power];
   G.powers[o.power] = def.dur;
-  SFX.power(); burst(o.x, o.y, '#ffffff', 24);
+  SFX.power(); burst(o.x, o.y, '#ffffff', 12);
   popup(o.x, o.y, `${def.e} ${def.name}!`, '#fff', 1.1);
   setExpr(c.pi, 'wow', 1);
-  say(def.say, { rate: 1.05 });
   stat('power');
   updateHUD(true);
 }
 function updatePowers(dt) {
   for (const k in G.powers) if (G.powers[k] > 0) G.powers[k] = Math.max(0, G.powers[k] - dt);
-  if (G.powers.rain > 0) { G.rainT -= dt; if (G.rainT <= 0) { G.rainT = 0.18; spawnStar(); } }
+  if (G.powers.rain > 0) { G.rainT -= dt; if (G.rainT <= 0) { G.rainT = 0.35; spawnStar(); } }
 }
 
 // ---------- eventi: Penny dice, sfida lampo, pentolaccia ----------
@@ -346,14 +349,14 @@ function startEvent(now) {
     opts.push('flash');
     if (G.playTime - G.lastPinata > 30) opts.push('pinata', 'pinata');
   }
-  if (!opts.length) { G.eventT = 10; return; }
+  if (!opts.length) { G.eventT = 12; return; }
   const type = pick(opts);
   if (type === 'says') startSays(now);
   else if (type === 'flash') startFlash();
   else startPinata();
 }
 function endEvent() {
-  G.event = null; G.eventT = rand(18, 26); hide('#eventCard');
+  G.event = null; G.eventT = eventDelay(); hide('#eventCard');
   players.forEach((p) => { p.NB.freeze = false; });
 }
 
@@ -367,7 +370,7 @@ function startSays(now) {
   G.event = ev;
   G.objs.forEach((o) => { if (o.kind !== 'pinata') o.dying = 0.0001; });
   G.hold = 99;
-  SFX.whoosh(); say(def.say);
+  SFX.whoosh(); say(def.say, { prio: 2 });
   updateEventCard();
 }
 function updateSays(dt, now) {
@@ -383,8 +386,8 @@ function updateSays(dt, now) {
       case 'su': cond = g.up; break;
       case 'testa': cond = g.head; need = 0.45; break;
       case 'aereo': cond = g.plane; need = 0.45; break;
-      case 'salta': cond = (st.base.cy - p.cy) / st.base.sw > 0.3; need = 0; break;
-      case 'giu': cond = (p.cy - st.base.cy) / st.base.sw > 0.55; need = 0.2; break;
+      case 'salta': cond = (st.base.cy - p.cy) / st.base.sw > 0.25; need = 0; break;
+      case 'giu': cond = (p.cy - st.base.cy) / st.base.sw > 0.45; need = 0.2; break;
       case 'clap':
         if (st.clap.open && g.handDist < 0.7) { st.clap.open = false; st.clap.n++; SFX.hit(); const h = handPoint(p, 'L'); if (h) popup(h.x, h.y, '👏'); }
         else if (!st.clap.open && g.handDist > 1.2) st.clap.open = true;
@@ -393,7 +396,7 @@ function updateSays(dt, now) {
     st.hold = cond ? st.hold + dt : 0;
     if (st.hold >= need && cond) {
       st.done = true; setExpr(p.i, 'happy', 1.2); SFX.catch(8);
-      const h = p.SP[0]; burst(h.x, h.y, '#ffd23f', 20);
+      const h = p.SP[0]; burst(h.x, h.y, '#ffd23f', 12);
     }
   }
   updateEventCard();
@@ -406,16 +409,16 @@ function updateSays(dt, now) {
 function endSays(ok, n) {
   endEvent(); G.hold = 0.6;
   if (ok) {
-    SFX.win(); confetti(90);
+    SFX.win(); confetti(40);
     addCoins(2 * n); G.coins += 2 * n;
     stat('says');
     G.score += 3 * mult();
     banner(`🎉 Bravissimo!<small>Hai fatto quello che dice Penny · +${2 * n} 🪙</small>`, 2000, true);
-    say('Bravissimo! Ecco una pioggia di premi!');
-    if (!M.learn) rewardRain(currentWorld().items, 9, 1);
+    say('Bravissimo!', { prio: 2 });
+    if (!M.learn) rewardRain(currentWorld().items, 5, 1);
   } else {
     banner('😄 Quasi!<small>La prossima volta ce la fai</small>', 1600, true);
-    say('Quasi! La prossima volta!');
+    say('Quasi! La prossima volta!', { prio: 2 });
   }
   updateHUD(true);
 }
@@ -425,7 +428,7 @@ function startFlash() {
   const def = pick(pool);
   G.event = { type: 'flash', def, t: 0, prog: 0, failed: false };
   SFX.whoosh();
-  say(`Sfida lampo! ${def.text.replace('🌵', 'quelli col cerchio rosso')}`);
+  say(`Sfida lampo! ${def.text.replace('🌵', 'quelli col cerchio rosso')}`, { prio: 2 });
   updateEventCard();
 }
 function updateFlash(dt) {
@@ -443,11 +446,10 @@ function updateFlash(dt) {
 function endFlash(ok) {
   endEvent();
   if (ok) {
-    SFX.win(); confetti(60);
+    SFX.win(); confetti(30);
     addCoins(3); G.coins += 3; stat('flash');
     G.score += 5 * mult();
-    banner('⚡ Sfida lampo vinta!<small>+5 punti · +3 🪙</small>', 1900);
-    cheer(true);
+    banner('⚡ Sfida lampo vinta!<small>+5 punti · +3 🪙</small>', 1700);
   } else banner('⏱️ Tempo scaduto!<small>Riprova alla prossima sfida</small>', 1500);
   updateHUD(true);
 }
@@ -458,7 +460,8 @@ function startPinata() {
   G.objs.push(o);
   G.event = { type: 'pinata', obj: o, t: 0, dur: 14 };
   G.lastPinata = G.playTime;
-  SFX.whoosh(); say('Arriva la pentolaccia! Colpiscila!');
+  G.objs.forEach((x) => { if (x !== o) x.dying = 0.0001; }); // lo schermo si libera: c'è solo la pentolaccia
+  SFX.whoosh(); say('Arriva la pentolaccia! Colpiscila!', { prio: 2 });
   updateEventCard();
 }
 function updatePinata(dt) {
@@ -478,13 +481,13 @@ function hitPinata(o, c) {
   const key = `${c.pi}${c.id}`;
   if (o.cd[key] > 0) return;
   o.cd[key] = 0.4;
-  o.hp--; o.shake = 1; FX.shake = 0.25;
-  SFX.hit(); burst(o.x, o.y, null, 10); setExpr(c.pi, 'wow', 0.6);
+  o.hp--; o.shake = 1;
+  SFX.hit(); burst(o.x, o.y, null, 6); setExpr(c.pi, 'wow', 0.6);
   popup(o.x, o.y - o.r, 'Pam!', '#fff');
   if (o.hp <= 0) {
     o.dead = true;
-    SFX.boom(); confetti(140); FX.shake = 0.6;
-    for (let i = 0; i < 14; i++) {
+    SFX.boom(); confetti(60);
+    for (let i = 0; i < 8; i++) {
       const it = makeObj(1, 0.6);
       it.emoji = pick(['🍬', '🍭', '🍫', '🍩', '🧁', '🍪']); it.pts = 2; it.bonus = true;
       it.x = o.x; it.y = o.y; const a = rand(-Math.PI * 0.9, -Math.PI * 0.1);
@@ -494,7 +497,7 @@ function hitPinata(o, c) {
     addCoins(3); G.coins += 3; stat('pinata');
     endEvent();
     banner('🪅 Pentolaccia rotta!<small>Prendi tutti i dolcetti! · +3 🪙</small>', 2000, true);
-    say('Evviva! Prendi i dolcetti!');
+    say('Evviva! Prendi i dolcetti!', { prio: 2 });
   }
   updateEventCard();
 }
@@ -528,15 +531,16 @@ function update(dt, now) {
   if (G.hold > 0) { if (!saysOn) G.hold -= dt; }
   else {
     G.spawnT -= dt; G.needT += dt;
-    let maxObj = a.maxObj + Math.floor((G.level - 1) / 2);
-    if (G.event && G.event.type === 'pinata') maxObj = Math.ceil(maxObj / 2);
+    let maxObj = a.maxObj + Math.floor((G.level - 1) / 3);
+    if (G.event && G.event.type === 'pinata') maxObj = 0; // durante la pentolaccia c'è solo lei
     const hasGood = M.learn && G.objs.some((o) => !o.rej && !o.dying && o.kind !== 'power' && M.isGood(o, G));
     if (M.learn && G.task && !hasGood && G.needT > a.needEvery / Math.sqrt(sm)) spawn(true);
     else if (G.spawnT <= 0 && G.objs.filter((o) => o.kind !== 'pinata').length < maxObj) {
       spawn(); G.spawnT = Math.max(0.35, a.spawn / Math.sqrt(sm)) * rand(0.7, 1.3);
     }
-    G.powerT -= dt;
-    if (G.powerT <= 0) { spawnPower(); G.powerT = rand(14, 22); }
+    // un potere alla volta, mai durante un evento o mentre un altro potere è attivo
+    const busy = G.event || Object.values(G.powers).some((v) => v > 0) || G.objs.some((o) => o.kind === 'power');
+    if (powersAllowed() && !busy) { G.powerT -= dt; if (G.powerT <= 0) { spawnPower(); G.powerT = powerDelay(); } }
   }
 
   // movimento + prese
@@ -680,7 +684,7 @@ function startGame() {
 async function startRound() {
   const s = ++G.session;
   Object.assign(G, { objs: [], elapsed: 0, spawnT: 0.8, needT: 0, hold: 0, lastTick: -1, paused: false, frozen: 0,
-    event: null, eventT: rand(16, 22), powerT: rand(10, 16), roundStart: G.score, powers: { magnet: 0, slow: 0, giant: 0, rain: 0 } });
+    event: null, eventT: festa() ? rand(18, 24) : rand(28, 34), powerT: festa() ? rand(12, 16) : rand(20, 26), roundStart: G.score, powers: { magnet: 0, slow: 0, giant: 0, rain: 0 } });
   hide('#eventCard');
   G.phase = 'intro';
   hideScreens(); show('#intro'); show('#hud'); hide('#btnPause');
@@ -692,14 +696,14 @@ async function startRound() {
   if (M.learn) {
     const an = M.announce(G, true);
     iw.innerHTML = an.html;
-    say(`Round ${G.round}! ${an.say}`, { rate: 0.88 });
+    say(`Round ${G.round}! ${an.say}`, { rate: 0.88, prio: 2 });
     await sleep(S.mode === 'parola' ? Math.min(9000, 3400 + G.task.seq.length * 600) : 3600);
   } else {
     const w = currentWorld();
     const how = S.catchMode === 'mani' ? 'Acchiappa con le due mani unite' : 'Acchiappa tutto quello che vola';
     const av = S.avoid && G.level >= A().avoidFrom;
     iw.innerHTML = `<span class="e">${w.e}</span><div class="w small">${w.name}</div><div class="l">${how}!<br>⭐ = 3 punti · 🧲🐢🦍🌈 = poteri${av ? `<br>Non toccare quelli col <b class="red">cerchio rosso</b>` : ''}</div>`;
-    say(`Round ${G.round}! ${how}!${av ? ' Ma non toccare quelli col cerchio rosso!' : ''}`);
+    say(`Round ${G.round}! ${how}!${av ? ' Ma non toccare quelli col cerchio rosso!' : ''}`, { prio: 2 });
     await sleep(av ? 3400 : 2700);
   }
   for (const n of ['3', '2', '1']) {
@@ -725,10 +729,10 @@ function endRound() {
   stat('rounds');
   updateHUD(true);
   if (G.round >= S.rounds) { showPrize(); return; }
-  SFX.level(); confetti(60);
+  SFX.level(); confetti(40);
   const n = S.rounds - G.round;
   $('#reTitle').textContent = `Round ${G.round} finito!`;
-  $('#reText').innerHTML = `⭐ <b>${G.score}</b> punti · 🪙 +${earned}<br>${G.comboBest >= 5 ? `🔥 Combo migliore: ${G.comboBest}<br>` : ''}${n === 1 ? 'Manca 1 round al premio!' : `Mancano ${n} round al premio!`}`;
+  $('#reText').innerHTML = `⭐ <b>${G.score}</b> punti · 🪙 +${earned}<br>${G.comboBest >= 5 ? `🔥 Combo migliore: ${G.comboBest}<br>` : ''}${G.recordBeaten ? '🏆 Stai battendo il tuo record!<br>' : ''}${n === 1 ? 'Manca 1 round al premio!' : `Mancano ${n} round al premio!`}${takeNews()}`;
   say(`Round finito! Hai ${G.score} punti!`);
   hideScreens(); show('#roundEnd');
 }
@@ -745,7 +749,7 @@ async function showPrize() {
   $('#prizeTop').textContent = 'HAI VINTO!';
   $('#prizeBonus').textContent = ''; $('#prizeNew').textContent = '';
   const two = S.players > 1 ? `<br><span class="p1">● Penny azzurra: ${players[0].catches}</span> · <span class="p2">● Penny arancione: ${players[1].catches}</span>` : '';
-  $('#prizeScore').innerHTML = `⭐ ${G.score} punti · 🪙 +${G.coins}${rec ? '<br>🏆 Nuovo record!' : ''}${two}`;
+  $('#prizeScore').innerHTML = `⭐ ${G.score} punti · 🪙 +${G.coins}${rec ? '<br>🏆 Nuovo record!' : ''}${two}${takeNews()}`;
   pt.textContent = 'Estrazione della figurina…';
   say('Hai vinto! Vediamo che figurina c’è…');
   for (let i = 0; i < 18; i++) {
@@ -756,7 +760,7 @@ async function showPrize() {
   if (s !== G.session) return;
   pe.textContent = st.e; pt.textContent = st.t; $('#prizeBonus').textContent = bonus;
   $('#prizeNew').textContent = isNew ? '✨ Nuova figurina per l’album!' : 'Ce l’avevi già: +5 🪙';
-  SFX.win(); confetti(220);
+  SFX.win(); confetti(120);
   say(`Hai vinto: ${st.t}! ${isNew ? 'È una figurina nuova!' : ''} ${bonus.replace('Bonus:', 'E in più:')}`, { rate: 0.92 });
 }
 
