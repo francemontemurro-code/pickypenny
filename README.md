@@ -7,6 +7,17 @@ Gioco per i più piccoli che usa la **telecamera frontale** del telefono: chi gi
 1. **Acchiappa tutto** – ogni oggetto vale 1 punto, le stelle ⭐ valgono 3. Raggiunti i punti del livello si sale di livello e gli oggetti vanno più veloci.
 2. **Acchiappa la parola** – Penny dice una parola (che resta in alto sullo schermo) e bisogna prendere le lettere **in ordine**. Lettera sbagliata = rimbalza via, nessuna penalità. Ogni parola completata fa salire di livello. La parola può essere a sorpresa o scelta da te.
 
+## Penny ha sempre la stessa grandezza
+
+Anche se chi gioca è vicinissimo alla telecamera, Penny resta della stessa misura in mezzo allo schermo: per acchiappare bisogna **spostarsi a destra e a sinistra** (il movimento è amplificato), saltare o piegarsi. La telecamera vera si vede in un riquadro nell'angolo (si può spegnere).
+
+## Come si acchiappa
+
+- **Con una mano** – basta toccare l'oggetto con una mano.
+- **Con due mani unite** 🧺 – si acchiappa solo unendo le mani, come per prendere una palla: niente prese per sbaglio agitando le braccia.
+
+Nella modalità *Acchiappa tutto* si possono attivare gli **oggetti da evitare** (🌵 🌧️ 🦔): toccarli toglie 2 punti e congela le mani per un secondo. Per i 3–4 anni compaiono dal livello 2.
+
 ## Regole del round
 
 - Prima di giocare scegli **minuti per round** e **quanti round** servono per il premio.

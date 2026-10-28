@@ -9,10 +9,12 @@ const UI_FONT = '"Baloo 2","Arial Rounded MT Bold",system-ui,sans-serif';
 
 // ---------- difficoltà per età ----------
 const AGES = {
-  mini:  { speed: 0.15, size: 0.085, target: 8,  maxObj: 4, spawn: 1.6, catchR: 0.095, rightProb: 0.6,  needEvery: 2.0, minLen: 3, maxLen: 4, helper: true,  patterns: [0.75, 0.25, 0] },
-  small: { speed: 0.21, size: 0.072, target: 12, maxObj: 6, spawn: 1.2, catchR: 0.078, rightProb: 0.5,  needEvery: 2.6, minLen: 4, maxLen: 5, helper: false, patterns: [0.6, 0.3, 0.1] },
-  big:   { speed: 0.29, size: 0.062, target: 15, maxObj: 8, spawn: 0.9, catchR: 0.066, rightProb: 0.4,  needEvery: 3.2, minLen: 5, maxLen: 6, helper: false, patterns: [0.5, 0.3, 0.2] },
+  // penny = larghezza spalle di Penny (frazione del lato corto dello schermo); avoidFrom = livello da cui compaiono gli oggetti da evitare
+  mini:  { speed: 0.15, size: 0.08,  target: 8,  maxObj: 4, spawn: 1.6, catchR: 0.075, penny: 0.2,  rightProb: 0.6, needEvery: 2.0, minLen: 3, maxLen: 4, helper: true,  patterns: [0.75, 0.25, 0],   avoidFrom: 2, avoidProb: 0.14 },
+  small: { speed: 0.21, size: 0.068, target: 12, maxObj: 6, spawn: 1.2, catchR: 0.062, penny: 0.18, rightProb: 0.5, needEvery: 2.6, minLen: 4, maxLen: 5, helper: false, patterns: [0.6, 0.3, 0.1],  avoidFrom: 1, avoidProb: 0.2 },
+  big:   { speed: 0.29, size: 0.058, target: 15, maxObj: 8, spawn: 0.9, catchR: 0.052, penny: 0.16, rightProb: 0.4, needEvery: 3.2, minLen: 5, maxLen: 6, helper: false, patterns: [0.5, 0.3, 0.2],  avoidFrom: 1, avoidProb: 0.26 },
 };
+const AVOID = ['🌵', '🌧️', '🦔'];
 const MINUTES = [0.5, 1, 2, 3, 4, 5, 7, 10];
 
 const ITEMS = ['🍎', '🍌', '🍓', '🍉', '⚽', '🎈', '🧸', '🍭', '🍩', '🐥', '🦋', '🍒', '🧁', '🐞'];
@@ -77,7 +79,7 @@ function cleanWord(s) {
 }
 
 // ---------- impostazioni ----------
-const DEFAULTS = { mode: 'punti', age: 'mini', minutes: 2, rounds: 3, wordChoice: 'random', customWord: '', showCam: true };
+const DEFAULTS = { mode: 'punti', age: 'mini', minutes: 2, rounds: 3, wordChoice: 'random', customWord: '', showCam: true, catchMode: 'mano', avoid: true };
 let S = { ...DEFAULTS };
 try { S = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('pickypenny.settings') || '{}') }; } catch (e) { /* storage non disponibile */ }
 function saveSettings() { try { localStorage.setItem('pickypenny.settings', JSON.stringify(S)); } catch (e) { /* ignora */ } }
@@ -164,6 +166,7 @@ const SFX = {
   go() { tone(1050, 0.32, 'triangle', 0.22); },
   win() { [523, 659, 784, 1046, 784, 1046, 1318].forEach((f, i) => tone(f, 0.22, 'triangle', 0.18, i * 0.13)); },
   roll() { tone(rand(500, 900), 0.05, 'square', 0.04); },
+  ouch() { tone(520, 0.12, 'sawtooth', 0.12, 0, 260); tone(260, 0.3, 'sine', 0.18, 0.1, 140); },
 };
 
 // ---------- voce ----------
@@ -188,7 +191,7 @@ function say(text, { rate = 0.95, pitch = 1.15, interrupt = true } = {}) {
 // ---------- telecamera + pose ----------
 let stream = null, camOn = false, landmarker = null, poseLoading = null;
 let lastVideoTime = -1, lastPoseAt = -1e9, SP = null; // SP = punti a schermo (smussati)
-const handPrev = { L: null, R: null }, handPulse = { L: 0, R: 0, P: 0 };
+const handPrev = { L: null, R: null, B: null }, handPulse = { L: 0, R: 0, P: 0, B: 0 };
 
 async function loadPose() {
   if (landmarker) return landmarker;
@@ -239,11 +242,13 @@ function updatePose(now) {
   const lm = res && res.landmarks && res.landmarks[0];
   if (!lm) return;
   const r = videoRect();
-  const pts = lm.map((p) => ({
+  const raw = lm.map((p) => ({
     x: W - (r.ox + p.x * r.vw * r.s), // specchio: come guardarsi allo specchio
     y: r.oy + p.y * r.vh * r.s,
     v: p.visibility == null ? 1 : p.visibility,
   }));
+  const pts = normalizeBody(raw, now);
+  if (!pts) return;
   if (!SP || now - lastPoseAt > 600) SP = pts;
   else {
     for (let i = 0; i < pts.length; i++) {
@@ -256,6 +261,37 @@ function updatePose(now) {
   lastPoseAt = now;
 }
 const personVisible = (now) => SP && now - lastPoseAt < 500;
+
+// Penny ha sempre la stessa grandezza sullo schermo, anche se chi gioca è vicinissimo
+// alla telecamera: il corpo viene rimpicciolito e messo al centro, e spostandosi a
+// destra/sinistra Penny attraversa lo schermo (movimento amplificato).
+const NB = { k: 0, cx: 0, cy: 0, baseY: 0, last: -1e9 };
+function normalizeBody(raw, now) {
+  const ls = raw[11], rs = raw[12];
+  let cx, cy, sw;
+  if (ls.v > 0.4 && rs.v > 0.4) {
+    cx = (ls.x + rs.x) / 2; cy = (ls.y + rs.y) / 2; sw = Math.hypot(ls.x - rs.x, ls.y - rs.y);
+  } else if (raw[7].v > 0.4 && raw[8].v > 0.4) { // solo la testa: spalle stimate dalle orecchie
+    const ew = Math.hypot(raw[7].x - raw[8].x, raw[7].y - raw[8].y);
+    cx = (raw[7].x + raw[8].x) / 2; cy = (raw[7].y + raw[8].y) / 2 + ew * 1.4; sw = ew * 2.3;
+  } else return null;
+  if (sw < 4) return null;
+  const target = MIN * A().penny;
+  const k = target / sw;
+  const fresh = now - NB.last > 800;
+  NB.last = now;
+  if (fresh) { NB.k = k; NB.cx = cx; NB.cy = cy; NB.baseY = cy; }
+  else {
+    NB.k += (k - NB.k) * 0.12;        // la grandezza cambia piano (niente zoom a scatti)
+    NB.cx += (cx - NB.cx) * 0.6;
+    NB.cy += (cy - NB.cy) * 0.6;
+    NB.baseY += (cy - NB.baseY) * 0.02; // altezza "normale" di chi gioca, si adatta lentamente
+  }
+  const margin = target * 1.1;
+  const ax = clamp(W / 2 + (NB.cx - W / 2) * 2.2, margin, W - margin);
+  const ay = clamp(H * 0.5 + (NB.cy - NB.baseY) * NB.k * 1.5, H * 0.3, H * 0.7); // salti e piegamenti
+  return raw.map((p) => ({ x: ax + (p.x - NB.cx) * NB.k, y: ay + (p.y - NB.cy) * NB.k, v: p.v }));
+}
 
 function handPoint(side) {
   const [w, i, p] = side === 'L' ? [15, 19, 17] : [16, 20, 18];
@@ -278,20 +314,38 @@ canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
 canvas.addEventListener('pointerleave', () => { pointer.active = false; });
 
+// Modalità "due mani": si acchiappa solo con le mani unite (come prendere una palla)
+function handsTogether() {
+  const l = handPoint('L'), r = handPoint('R');
+  if (!l || !r) return null;
+  const rad = A().catchR * MIN;
+  const d = Math.hypot(l.x - r.x, l.y - r.y);
+  return d < rad * 2.6 ? { x: (l.x + r.x) / 2, y: (l.y + r.y) / 2 } : null;
+}
+
 function getCatchers(now) {
-  const A = AGES[S.age];
-  const r = A.catchR * MIN;
+  const r = A().catchR * MIN;
   const out = [];
+  if (G.frozen > 0) { handPrev.L = handPrev.R = handPrev.B = null; return out; }
   if (personVisible(now)) {
-    for (const side of ['L', 'R']) {
-      const h = handPoint(side);
-      if (h) {
-        const prev = handPrev[side] || h;
-        out.push({ id: side, x: h.x, y: h.y, px: prev.x, py: prev.y, r });
-        handPrev[side] = { x: h.x, y: h.y };
-      } else handPrev[side] = null;
+    if (S.catchMode === 'mani') {
+      const b = handsTogether();
+      if (b) {
+        const prev = handPrev.B || b;
+        out.push({ id: 'B', x: b.x, y: b.y, px: prev.x, py: prev.y, r: r * 1.3 });
+        handPrev.B = b;
+      } else handPrev.B = null;
+    } else {
+      for (const side of ['L', 'R']) {
+        const h = handPoint(side);
+        if (h) {
+          const prev = handPrev[side] || h;
+          out.push({ id: side, x: h.x, y: h.y, px: prev.x, py: prev.y, r });
+          handPrev[side] = { x: h.x, y: h.y };
+        } else handPrev[side] = null;
+      }
     }
-  } else { handPrev.L = handPrev.R = null; }
+  } else { handPrev.L = handPrev.R = handPrev.B = null; }
   if (pointer.active) {
     out.push({ id: 'P', x: pointer.x, y: pointer.y, px: pointer.px, py: pointer.py, r });
     pointer.px = pointer.x; pointer.py = pointer.y;
@@ -305,11 +359,12 @@ const G = {
   paused: false, session: 0,
   score: 0, level: 1, levelPts: 0, round: 1, roundTime: 120, elapsed: 0,
   objs: [], parts: [], pops: [],
-  spawnT: 0, needT: 0, hold: 0, readyHold: 0, lastTick: -1,
+  spawnT: 0, needT: 0, hold: 0, readyHold: 0, lastTick: -1, frozen: 0,
   word: '', wordEmoji: '', wordIdx: 0, usedWords: [], customUsed: false, wordsDone: 0,
 };
 const A = () => AGES[S.age];
 const levelTarget = () => A().target + 4 * (G.level - 1);
+const avoidOn = () => S.mode === 'punti' && S.avoid && G.level >= A().avoidFrom;
 function speedMul() {
   const lv = Math.min(3, 1 + 0.17 * (G.level - 1));
   const tm = 1 + 0.6 * Math.min(1, G.elapsed / G.roundTime);
@@ -367,7 +422,10 @@ function spawn(forceNeeded = false) {
     o.color = `hsl(${(letter.charCodeAt(0) * 47) % 360} 85% 58%)`;
     o.vr *= 0.25;
   } else {
-    if (Math.random() < 0.09) { o.emoji = STAR; o.pts = 3; o.r = r * 0.85; o.fast = 1.3; }
+    const pAvoid = avoidOn() ? Math.min(0.32, a.avoidProb + 0.02 * (G.level - a.avoidFrom)) : 0;
+    const roll = Math.random();
+    if (roll < pAvoid) { o.emoji = pick(AVOID); o.avoid = true; o.pts = 0; o.r = r * 1.05; }
+    else if (roll < pAvoid + 0.09) { o.emoji = STAR; o.pts = 3; o.r = r * 0.85; o.fast = 1.3; }
     else { o.emoji = pick(ITEMS); o.pts = 1; }
   }
   const f = o.fast || 1;
@@ -416,6 +474,16 @@ function onCatch(o, c) {
     }
     return;
   }
+  if (o.avoid) {
+    o.dead = true;
+    const lost = Math.min(2, G.score);
+    G.score -= lost; G.levelPts = Math.max(0, G.levelPts - lost);
+    G.frozen = 1.0;
+    SFX.ouch(); burst(o.x, o.y, '#9be7ff', 18);
+    popup(o.x, o.y, lost ? `Ahi! -${lost}` : 'Ahi!', '#9be7ff');
+    updateHUD(true);
+    return;
+  }
   o.dead = true; G.score += o.pts; G.levelPts += o.pts;
   if (o.pts > 1) { SFX.star(); burst(o.x, o.y, '#ffd23f', 26); popup(o.x, o.y, `+${o.pts} ⭐`, '#ffd23f'); }
   else { SFX.catch(); burst(o.x, o.y); popup(o.x, o.y, '+1'); }
@@ -431,7 +499,9 @@ function showBanner(html, ms = 1800) {
 function levelUp() {
   G.level++; G.levelPts = 0;
   SFX.level(); confetti(50);
-  showBanner(`Livello ${G.level}! 🚀<small>Ora si va più veloci!</small>`);
+  const newAvoid = S.mode === 'punti' && S.avoid && G.level === A().avoidFrom && G.level > 1;
+  showBanner(newAvoid ? `Livello ${G.level}! 🚀<small>Attenzione: non toccare 🌵 🌧️ 🦔</small>` : `Livello ${G.level}! 🚀<small>Ora si va più veloci!</small>`, newAvoid ? 2600 : 1800);
+  if (newAvoid) { say(`Livello ${G.level}! Attenzione: non toccare i cactus, le nuvolette e i ricci!`); return; }
   say(`Livello ${G.level}! Più veloce!`);
 }
 async function wordComplete() {
@@ -458,6 +528,7 @@ function update(dt, now) {
   if (sec <= 5 && sec !== G.lastTick) { G.lastTick = sec; SFX.tick(); }
 
   const a = A(), sm = speedMul();
+  if (G.frozen > 0) G.frozen -= dt;
   if (G.hold > 0) G.hold -= dt;
   else {
     G.spawnT -= dt; G.needT += dt;
@@ -501,13 +572,19 @@ function updateEffects(dt) {
 }
 
 // ---------- disegno ----------
+// La telecamera vera si vede in un riquadro nell'angolo (Penny invece ha sempre la stessa grandezza)
 function drawVideo() {
   if (!S.showCam || !camOn || video.readyState < 2) return;
-  const r = videoRect();
-  ctx.save(); ctx.globalAlpha = 0.33;
-  ctx.translate(W, 0); ctx.scale(-1, 1);
-  ctx.drawImage(video, r.ox, r.oy, r.vw * r.s, r.vh * r.s);
+  const vw = video.videoWidth || 640, vh = video.videoHeight || 480;
+  const w = MIN * 0.3, h = w * vh / vw, m = 12 * DPR;
+  const x = m, y = H - h - m - (innerWidth <= 420 && S.mode === 'parola' ? 70 * DPR : 0);
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, 14 * DPR) : ctx.rect(x, y, w, h); ctx.clip();
+  ctx.translate(x + w, y); ctx.scale(-1, 1);
+  ctx.drawImage(video, 0, 0, w, h);
   ctx.restore();
+  ctx.lineWidth = 3 * DPR; ctx.strokeStyle = 'rgba(255,255,255,.8)';
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, 14 * DPR) : ctx.rect(x, y, w, h); ctx.stroke();
 }
 
 function seg(a, b, color, w) {
@@ -590,20 +667,33 @@ function drawPenny(now) {
 
 function drawHands(now) {
   const r = A().catchR * MIN;
+  const frozen = G.frozen > 0 && G.phase === 'play';
   const list = [];
+  let together = null;
   if (personVisible(now)) {
     const l = handPoint('L'), rr = handPoint('R');
-    if (l) list.push(['L', l, '#3fc7ff']); if (rr) list.push(['R', rr, '#3ee6b5']);
+    if (S.catchMode === 'mani') together = handsTogether();
+    const dim = S.catchMode === 'mani' && !together; // mani separate: non acchiappano
+    if (l) list.push(['L', l, frozen ? '#9be7ff' : '#3fc7ff', dim]);
+    if (rr) list.push(['R', rr, frozen ? '#9be7ff' : '#3ee6b5', dim]);
   }
-  if (pointer.active) list.push(['P', pointer, '#ffd23f']);
-  for (const [id, p, col] of list) {
+  if (pointer.active) list.push(['P', pointer, '#ffd23f', false]);
+  for (const [id, p, col, dim] of list) {
     const k = 1 + handPulse[id] * 0.35;
+    ctx.globalAlpha = dim ? 0.45 : 1;
     const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 1.5 * k);
     g.addColorStop(0, col); g.addColorStop(0.55, col + 'aa'); g.addColorStop(1, col + '00');
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, r * 1.5 * k, 0, 7); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.9;
-    ctx.beginPath(); ctx.arc(p.x, p.y, r * 0.55 * k, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
-    const img = emojiImg('✋', r * 0.8 * k); ctx.drawImage(img, p.x - img.width / 2, p.y - img.height / 2);
+    ctx.fillStyle = '#fff'; ctx.globalAlpha *= 0.9;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r * 0.55 * k, 0, 7); ctx.fill(); ctx.globalAlpha = dim ? 0.45 : 1;
+    const img = emojiImg(frozen ? '🥶' : '✋', r * 0.8 * k); ctx.drawImage(img, p.x - img.width / 2, p.y - img.height / 2);
+  }
+  ctx.globalAlpha = 1;
+  if (together && !frozen) { // mani unite: compare il cestino che acchiappa
+    const k = 1 + handPulse.B * 0.35, rb = r * 1.3 * k;
+    ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = rb * 0.12;
+    ctx.beginPath(); ctx.arc(together.x, together.y, rb, 0, 7); ctx.stroke();
+    const img = emojiImg('🧺', rb * 1.2); ctx.drawImage(img, together.x - img.width / 2, together.y - img.height / 2);
   }
 }
 
@@ -626,6 +716,11 @@ function drawObjects(now) {
       ctx.lineWidth = o.r * 0.14; ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.strokeText(o.letter, 0, o.r * 0.08);
       ctx.fillText(o.letter, 0, o.r * 0.08);
     } else {
+      if (o.avoid) {
+        ctx.fillStyle = 'rgba(255,60,90,.22)'; ctx.beginPath(); ctx.arc(0, 0, o.r * 1.3, 0, 7); ctx.fill();
+        ctx.setLineDash([o.r * 0.25, o.r * 0.18]); ctx.lineWidth = o.r * 0.1; ctx.strokeStyle = '#ff3c5a';
+        ctx.beginPath(); ctx.arc(0, 0, o.r * 1.3, now / 400, now / 400 + 6.283); ctx.stroke(); ctx.setLineDash([]);
+      }
       if (o.emoji === STAR) { ctx.fillStyle = 'rgba(255,210,63,.3)'; ctx.beginPath(); ctx.arc(0, 0, o.r * 1.4, 0, 7); ctx.fill(); }
       const img = emojiImg(o.emoji, o.r * 2);
       ctx.drawImage(img, -img.width / 2, -img.height / 2);
@@ -738,7 +833,7 @@ function startGame() {
 
 async function startRound() {
   const s = ++G.session;
-  G.objs = []; G.elapsed = 0; G.spawnT = 0.8; G.needT = 0; G.hold = 0; G.lastTick = -1; G.paused = false;
+  G.objs = []; G.elapsed = 0; G.spawnT = 0.8; G.needT = 0; G.hold = 0; G.lastTick = -1; G.paused = false; G.frozen = 0;
   G.phase = 'intro';
   hideScreens(); show('#intro'); show('#hud'); hide('#btnPause');
   if (S.mode === 'parola') show('#wordBar');
@@ -751,8 +846,10 @@ async function startRound() {
     say(`Round ${G.round}. La parola è: ${G.word.toLowerCase()}. Prendi le lettere in ordine: ${spellText(G.word.slice(G.wordIdx))}.`, { rate: 0.85 });
     await sleep(Math.min(9000, 3200 + G.word.length * 650));
   } else {
-    iw.innerHTML = `<span class="e">🍓⭐🎈</span><div class="l">Acchiappa tutto quello che vola!<br>Le stelle valgono 3 punti</div>`;
-    say(`Round ${G.round}! Acchiappa tutto quello che vola!`);
+    const avoidTxt = S.avoid && G.level >= A().avoidFrom;
+    const how = S.catchMode === 'mani' ? 'Acchiappa con le due mani unite' : 'Acchiappa tutto quello che vola';
+    iw.innerHTML = `<span class="e">🍓⭐🎈</span><div class="l">${how}!<br>Le stelle valgono 3 punti${avoidTxt ? '<br>Ma attenzione: <b>non toccare 🌵 🌧️ 🦔</b>' : ''}</div>`;
+    say(`Round ${G.round}! ${how}!${avoidTxt ? ' Ma non toccare i cactus, le nuvolette e i ricci!' : ''}`);
     await sleep(2600);
   }
   for (const n of ['3', '2', '1']) {
@@ -856,6 +953,8 @@ function refreshSetup() {
   $('#customWord').classList.toggle('hidden', S.wordChoice !== 'custom');
   $('#customWord').value = S.customWord;
   $('#showCam').checked = !!S.showCam;
+  $('#avoid').checked = !!S.avoid;
+  $('#avoidRow').classList.toggle('hidden', S.mode !== 'punti');
 }
 document.querySelectorAll('[data-group]').forEach((g) => {
   g.addEventListener('click', (e) => {
@@ -880,6 +979,7 @@ $('#customWord').addEventListener('input', (e) => {
   if (e.target.value !== v) e.target.value = v;
 });
 $('#showCam').addEventListener('change', (e) => { S.showCam = e.target.checked; saveSettings(); });
+$('#avoid').addEventListener('change', (e) => { S.avoid = e.target.checked; saveSettings(); });
 
 $('#btnPlay').addEventListener('click', () => {
   if (S.mode === 'parola' && S.wordChoice === 'custom' && cleanWord(S.customWord).length < 2) {
